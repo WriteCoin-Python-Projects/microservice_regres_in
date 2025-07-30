@@ -1,21 +1,13 @@
 import json
 import os
 from typing import Any, Dict
-from pydantic import BaseModel
 import atexit
 import requests
 from fastapi import FastAPI, HTTPException
 from enum import Enum
+from schema import Item
 
 app = FastAPI()
-
-
-# Модель данных
-class Item(BaseModel):
-    id: str
-
-    class Config:
-        extra = "allow"
 
 
 data_file = "data.json"
@@ -63,7 +55,7 @@ def load_data():
     global data
     try:
         if os.path.exists(data_file):
-            with open(data_file, "r") as file:
+            with open(data_file, "r", encoding='utf-8') as file:
                 items = json.load(file)
                 data = {item["id"]: Item(**item) for item in items}
         else:
@@ -78,29 +70,26 @@ def save_data():
     """Сохранение данных в JSON файл при завершении"""
     try:
         # items = [item for (key, item) in data.items()]
-        with open(data_file, "w") as file:
+        with open(data_file, "w", encoding='utf-8') as file:
             json.dump(data, file, indent=4)
         print(f"Данные успешно сохранены, всего элементов: {len(data)}")
     except Exception as e:
         print(f"Ошибка при сохранении данных: {e}")
+        raise e
 
 
 @app.get("/api/{request:path}")
 async def request(request: str):
-    print("request:", request)
     """Получить элемент по запросу"""
     if request in data:
         return data[request]
     elif case_service == Case.MICROSERVICE:
-        print(case_service)
         raise HTTPException(status_code=404, detail="Item not found")
     # отправка запроса
     url = f"https://reqres.in/api/{request}"
     headers = {"x-api-key": "reqres-free-v1"}
     try:
-        print("Запрос", url)
         response = requests.get(url, headers=headers, timeout=5)
-        print("Ответ", response.text)
 
         # Проверяем статус ответа
         if response.status_code != 200:
@@ -133,8 +122,13 @@ async def create_item(item: Item):
     """Создать новый элемент"""
     if item.id in data:
         raise HTTPException(status_code=400, detail="Item already exists")
-    data[item.id] = item
+    data[item.id] = dict(item)
+    try:
+        save_data()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=e.__repr__)
     return item
+
 
 @app.put("/api/{item_id:path}", response_model=Item)
 async def update_item(item_id: int, item: Item):
@@ -143,8 +137,13 @@ async def update_item(item_id: int, item: Item):
     """Обновить существующий элемент"""
     if item_id not in data:
         raise HTTPException(status_code=404, detail="Item not found")
-    data[item_id] = item
+    data[item_id] = dict(item)
+    try:
+        save_data()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=e.__repr__)
     return item
+
 
 @app.delete("/api/{item_id:path}")
 async def delete_item(item_id: str):
@@ -154,7 +153,12 @@ async def delete_item(item_id: str):
     if item_id not in data:
         raise HTTPException(status_code=404, detail="Item not found")
     del data[item_id]
+    try:
+        save_data()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=e.__repr__)
     return {"message": "Item deleted"}
+
 
 @app.get("/status")
 def main():

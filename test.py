@@ -5,6 +5,8 @@ import pytest
 import requests
 from jsonschema import validate
 
+from schema import Item
+
 data_reqres_in: Dict[str, Any] = {}
 data_microservice: Dict[str, Any] = {}
 file_reqres_in = "data_reqres_in.json"
@@ -45,10 +47,14 @@ def test_reqres_in(user_id: int, expected_email: str):
 
 
 def test_microservice():
+    item_data = {"id": "users/1", "name": "морфеус", "job": "мастер"}
+    item = Item.model_validate(item_data)
     response = requests.post(
-        "http://localhost:8000/api/items", data={"id": "users/1", "name": "морфеус", "job": "мастер"}
+        "http://localhost:8000/api/items/", json=item.model_dump()
     )
     body = response.json()
 
-    assert response.status_code == 201
-    validate(body, schema=data_microservice["users/1"])
+    print(body)
+
+    assert response.status_code == 200
+    validate(Item(**body), schema=data_microservice["users/1"])
